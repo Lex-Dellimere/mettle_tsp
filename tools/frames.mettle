@@ -1,0 +1,39 @@
+// Renders one PNG per frame of a nearest-neighbour then 2-opt run on 60 cities, then the start
+// of an annealing run, into build/frames/. Used to make the animation in the blog post.
+import "std/io";
+import "mythic/mythic";
+import "../src/app.mettle";
+
+var g_frame: int32 = 0;
+
+fn frame(a: MythicApp*, app: TspApp*, save: bool) {
+  mythic_request_frame_in(mythic_app_ui(a), 0);
+  mythic_headless_advance_us(mythic_app_platform(a), 16000);
+  mythic_app_step(a, &tsp_app_frame, (rawptr)app, false);
+  if (save) {
+    var k: int32 = g_frame;
+    var name: string = "{k}";
+    if (k < 10) { name = "00{k}"; } else if (k < 100) { name = "0{k}"; }
+    mythic_app_save_png(a, "build/frames/{name}.png");
+    g_frame = g_frame + 1;
+  }
+}
+
+fn main() -> int32 {
+  var app: TspApp* = new TspApp;
+  tsp_app_init(app, (uint64)11);
+  tsp_random_cities(&app->t, 60);
+  var a: MythicApp* = mythic_app_create_headless({ title: "tsp", width: 1240, height: 900 }, 1.0);
+  for q: int32 in 0..3 { frame(a, app, false); }
+  for q: int32 in 0..12 { frame(a, app, true); }
+  app->speed = 0.0;
+  tsp_start(&app->t, TSP_NEAREST);
+  app->running = true;
+  while (app->t.phase == TSP_BUILD) { frame(a, app, true); }
+  app->speed = 0.42;    // about 64 pair tests per frame
+  while (app->running) { frame(a, app, true); }
+  for q: int32 in 0..45 { frame(a, app, true); }
+  println("{g_frame} frames, 2-opt took {app->t.steps} steps");
+  mythic_app_destroy(a);
+  return 0;
+}

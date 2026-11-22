@@ -1,0 +1,84 @@
+// Renders the app headless at a few points of a run and saves PNGs into build/shots/.
+// Also clicks the map once to check that a click adds a city.
+import "std/io";
+import "mythic/mythic";
+import "../src/app.mettle";
+
+fn frame(a: MythicApp*, app: TspApp*) {
+  mythic_request_frame_in(mythic_app_ui(a), 0);
+  mythic_headless_advance_us(mythic_app_platform(a), 16000);
+  mythic_app_step(a, &tsp_app_frame, (rawptr)app, false);
+}
+
+fn frames(a: MythicApp*, app: TspApp*, k: int32) {
+  for q: int32 in 0..k { frame(a, app); }
+}
+
+fn shot(a: MythicApp*, app: TspApp*, name: string) {
+  frame(a, app);
+  frame(a, app);
+  mythic_app_save_png(a, "build/shots/{name}.png");
+  println("{name}: phase {app->t.phase} steps {app->t.steps} cost {(int32)(app->t.cost * 1000.0)}");
+}
+
+fn click(a: MythicApp*, app: TspApp*, x: float32, y: float32, button: int32) {
+  var p: MythicPlatform* = mythic_app_platform(a);
+  var mv: MythicEvent = { kind: MYTHIC_EV_MOUSE_MOVE, x: x, y: y };
+  mythic_headless_push(p, mv);
+  frame(a, app);
+  var dn: MythicEvent = { kind: MYTHIC_EV_MOUSE_DOWN, x: x, y: y, button: button };
+  mythic_headless_push(p, dn);
+  frame(a, app);
+  var up: MythicEvent = { kind: MYTHIC_EV_MOUSE_UP, x: x, y: y, button: button };
+  mythic_headless_push(p, up);
+  frame(a, app);
+}
+
+fn main() -> int32 {
+  var app: TspApp* = new TspApp;
+  tsp_app_init(app, (uint64)7);
+  var a: MythicApp* = mythic_app_create_headless({ title: "tsp", width: 1240, height: 900 }, 1.0);
+  frames(a, app, 3);
+  shot(a, app, "1-idle");
+
+  app->speed = 0.0;
+  tsp_start(&app->t, TSP_NEAREST);
+  app->running = true;
+  frames(a, app, 22);
+  shot(a, app, "2-build");
+  frames(a, app, 40);
+  app->speed = 0.3;
+  frames(a, app, 30);
+  app->speed = 0.0;
+  shot(a, app, "3-two-opt");
+  app->speed = 1.0;
+  frames(a, app, 60);
+  shot(a, app, "4-done");
+
+  app->algo = TSP_ANNEAL;
+  tsp_start(&app->t, TSP_ANNEAL);
+  app->running = true;
+  app->speed = 0.7;
+  while (app->t.steps < app->t.anneal_total / 3) { frame(a, app); }
+  shot(a, app, "5-anneal");
+
+  tsp_random_cities(&app->t, 9);
+  app->algo = TSP_EXHAUSTIVE;
+  tsp_start(&app->t, TSP_EXHAUSTIVE);
+  app->running = true;
+  app->speed = 0.6;
+  frames(a, app, 40);
+  shot(a, app, "6-exhaustive");
+
+  app->running = false;
+  tsp_random_cities(&app->t, 0);
+  shot(a, app, "7-empty");
+  click(a, app, 300.0, 300.0, 1);
+  click(a, app, 500.0, 600.0, 1);
+  println("cities after two clicks: {app->t.n}");
+  click(a, app, 500.0, 600.0, 3);
+  println("cities after a right-click on one: {app->t.n}");
+  shot(a, app, "8-clicked");
+  mythic_app_destroy(a);
+  return 0;
+}

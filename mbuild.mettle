@@ -1,0 +1,20 @@
+// mettle_tsp: the traveling salesman problem, solved three ways and drawn step by step with MythicUI.
+import "mbuild/api";
+
+fn project() {
+  mb_package("mettle_tsp", "0.1.0");
+  mb_meta("description", "The traveling salesman problem solved three ways, every step drawn, in Mettle");
+  mb_meta("license", "Apache-2.0");
+  mb_targets("linux");
+  mb_bin("tsp", "src/main.mettle");
+  mb_bin("check", "tests/check.mettle");
+  mb_bin("compare", "tools/compare.mettle");
+  mb_bin("snapshot", "tools/snapshot.mettle");
+  mb_bin("frames", "tools/frames.mettle");
+  mb_link_libs("c");          // MythicUI loads OpenGL at run time with dlopen
+  mb_agents(false);
+}
+
+fn deps() {
+  mb_dep("mythic", "0.1.0");
+}

@@ -1,0 +1,89 @@
+// Checks the solvers against each other on fixed random instances.
+//   every result is a tour that visits each city once
+//   2-opt never makes the nearest-neighbour tour longer
+//   for up to 9 cities, exhaustive search matches a separate brute force, and neither
+//   heuristic beats it
+// Prints one line per instance and exits 1 on the first failure.
+import "std/io";
+import "../src/tsp.mettle";
+
+var g_fail: int32 = 0;
+
+fn fail(what: string) {
+  println("FAIL: {what}");
+  g_fail = g_fail + 1;
+}
+
+fn run_to_end(t: Tsp*, algo: int32) -> float64 {
+  if (!tsp_start(t, algo)) { return -1.0; }
+  var guard: int64 = 0;
+  while (tsp_step(t)) {
+    guard = guard + 1;
+    if (guard > (int64)50000000) { fail("run did not finish"); return -1.0; }
+  }
+  if (!tsp_is_tour(t, &t->tour[0])) { fail("result is not a tour"); }
+  var c: float64 = tsp_cost_of(t, &t->tour[0], t->n);
+  var diff: float64 = c - t->cost;
+  if (diff < 0.0) { diff = -diff; }
+  if (diff > 0.000001) { fail("reported cost {t->cost} differs from the tour's cost {c}"); }
+  return c;
+}
+
+// brute force by recursion over every order that starts at city 0, written apart from the
+// solver's own permutation walk
+fn brute(t: Tsp*, order: int32*, used: bool*, k: int32, best: float64*) {
+  if (k == t->n) {
+    var c: float64 = tsp_cost_of(t, order, t->n);
+    if (c < *best) { *best = c; }
+    return;
+  }
+  for c: int32 in 1..t->n {
+    if (used[c]) { continue; }
+    used[c] = true;
+    order[k] = c;
+    brute(t, order, used, k + 1, best);
+    used[c] = false;
+  }
+}
+
+// cost of the nearest-neighbour tour alone, before 2-opt
+fn nn_cost(t: Tsp*) -> float64 {
+  tsp_start(t, TSP_NEAREST);
+  while (t->phase == TSP_BUILD) { tsp_step(t); }
+  return tsp_cost_of(t, &t->tour[0], t->n);
+}
+
+fn main() -> int32 {
+  var t: Tsp* = new Tsp;
+  tsp_seed(t, (uint64)12345);
+  for round: int32 in 0..40 {
+    var n: int32 = 4 + round % 6;          // 4..9 cities: brute force stays cheap
+    if (round >= 30) { n = 60 + round * 4; } // larger instances for the heuristics only
+    tsp_random_cities(t, n);
+    var nn: float64 = nn_cost(t);
+    var two: float64 = run_to_end(t, TSP_NEAREST);
+    var ann: float64 = run_to_end(t, TSP_ANNEAL);
+    if (two > nn + 0.000001) { fail("2-opt made the tour longer: {nn} -> {two}"); }
+    if (n <= 9) {
+      var ex: float64 = run_to_end(t, TSP_EXHAUSTIVE);
+      if (t->steps != t->orders_total) { fail("checked {t->steps} orders, expected {t->orders_total}"); }
+      var order: int32[400];
+      var used: bool[400];
+      order[0] = 0;
+      used[0] = true;
+      var bf: float64 = 1000000.0;
+      brute(t, &order[0], &used[0], 1, &bf);
+      var d: float64 = ex - bf;
+      if (d < 0.0) { d = -d; }
+      if (d > 0.000001) { fail("exhaustive {ex} differs from brute force {bf}"); }
+      if (two < ex - 0.000001) { fail("2-opt {two} beat the optimum {ex}"); }
+      if (ann < ex - 0.000001) { fail("annealing {ann} beat the optimum {ex}"); }
+      println("n={n} nn={(int32)(nn * 1000.0)} 2opt={(int32)(two * 1000.0)} anneal={(int32)(ann * 1000.0)} optimum={(int32)(ex * 1000.0)}");
+    } else {
+      println("n={n} nn={(int32)(nn * 1000.0)} 2opt={(int32)(two * 1000.0)} anneal={(int32)(ann * 1000.0)}");
+    }
+    if (g_fail > 0) { return 1; }
+  }
+  println("all checks passed");
+  return 0;
+}

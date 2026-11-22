@@ -1,0 +1,10 @@
+// Traveling salesman, drawn with MythicUI.
+import "mythic/mythic";
+import "std/random";
+import "app.mettle";
+
+fn main() -> int32 {
+  var app: TspApp* = new TspApp;
+  tsp_app_init(app, random_u64());
+  return mythic_run({ title: "Traveling salesman", width: 1240, height: 900, min_width: 900, min_height: 640 }, &tsp_app_frame, (rawptr)app);
+}
