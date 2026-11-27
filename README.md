@@ -35,6 +35,8 @@ The check makes sure every result is a tour, that 2-opt never makes the nearest 
 - `tools/compare.mettle` measures how far each method's tours are from the shortest.
 - `tools/frames.mettle` saves a PNG for every frame of a run, for the animation.
 
+`snapshot` and `frames` take an optional scale as their first argument, so `mbuild run frames -- 2` renders at twice the size.
+
 ## License
 
 Apache-2.0

@@ -37,10 +37,18 @@ fn click(a: MythicApp*, app: TspApp*, x: float32, y: float32, button: int32) {
   frame(a, app);
 }
 
-fn main() -> int32 {
+// an optional first argument sets the scale, 1 to 9
+fn scale_arg(argc: int32, argv: cstring*) -> float32 {
+  if (argc < 2 || argv[1][0] < (uint8)49 || argv[1][0] > (uint8)57) {
+    return 1.0;
+  }
+  return (float32)(argv[1][0] - (uint8)48);
+}
+
+fn main(argc: int32, argv: cstring*) -> int32 {
   var app: TspApp* = new TspApp;
   tsp_app_init(app, (uint64)7);
-  var a: MythicApp* = mythic_app_create_headless({ title: "tsp", width: 1240, height: 900 }, 1.0);
+  var a: MythicApp* = mythic_app_create_headless({ title: "tsp", width: 1240, height: 900 }, scale_arg(argc, argv));
   frames(a, app, 3);
   shot(a, app, "1-idle");
 
