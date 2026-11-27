@@ -56,6 +56,7 @@ export struct Tsp {
   accepted: int64;
 
   orders_total: int64;
+  path: float64[400];      // cost from tour[0] to tour[p]
 
   rng: uint64;
 
@@ -115,15 +116,6 @@ export fn tsp_cost_of(t: Tsp*, order: int32*, k: int32) -> float64 {
     c = c + tsp_dist(t, order[p], order[p + 1]);
   }
   return c + tsp_dist(t, order[k - 1], order[0]);
-}
-
-// length of the open path through order[0..k]
-export fn tsp_path_cost(t: Tsp*, order: int32*, k: int32) -> float64 {
-  var c: float64 = 0.0;
-  for p: int32 in 0..k - 1 {
-    c = c + tsp_dist(t, order[p], order[p + 1]);
-  }
-  return c;
 }
 
 // true when order[0..n] holds each city exactly once
@@ -258,6 +250,15 @@ fn factorial(k: int32) -> int64 {
   return f;
 }
 
+// refresh path[k..n-1] and the cost, summed as in tsp_cost_of
+fn path_from(t: Tsp*, k: int32) {
+  var n: int32 = t->n;
+  for p: int32 in k..n {
+    t->path[p] = t->path[p - 1] + tsp_dist(t, t->tour[p - 1], t->tour[p]);
+  }
+  t->cost = t->path[n - 1] + tsp_dist(t, t->tour[n - 1], t->tour[0]);
+}
+
 // false when algo cannot run on these cities
 export fn tsp_start(t: Tsp*, algo: int32) -> bool {
   tsp_reset(t);
@@ -321,7 +322,8 @@ export fn tsp_start(t: Tsp*, algo: int32) -> bool {
     t->tour[p] = p;
   }
   t->len = t->n;
-  t->cost = tsp_cost_of(t, &t->tour[0], t->n);
+  t->path[0] = 0.0;
+  path_from(t, 1);
   t->start_cost = t->cost;
   keep_best(t);
   t->orders_total = factorial(t->n - 1);
@@ -428,14 +430,13 @@ fn two_opt_step(t: Tsp*) {
         edges_none(t);
         return;
       }
+
+      // 2-opt never lengthens the tour, so copy best once a sweep
+      keep_best(t);
       t->i = 0;
       t->j = 2;
       t->improved = false;
     }
-  }
-
-  if (t->cost < t->best_cost) {
-    keep_best(t);
   }
 }
 
@@ -491,15 +492,16 @@ fn anneal_step(t: Tsp*) {
   }
 }
 
-// next lexicographic order of 1..n-1, false after the last
-fn next_order(t: Tsp*) -> bool {
+// step 1..n-1 to the next lexicographic order
+// returns the first position it changed, or 0 after the last
+fn next_order(t: Tsp*) -> int32 {
   var n: int32 = t->n;
   var k: int32 = n - 2;
   while (k >= 1 && t->tour[k] > t->tour[k + 1]) {
     k = k - 1;
   }
   if (k < 1) {
-    return false;
+    return 0;
   }
 
   var l: int32 = n - 1;
@@ -511,11 +513,12 @@ fn next_order(t: Tsp*) -> bool {
   t->tour[k] = t->tour[l];
   t->tour[l] = s;
   reverse(t, k + 1, n - 1);
-  return true;
+  return k;
 }
 
 fn search_step(t: Tsp*) {
-  if (!next_order(t)) {
+  var first: int32 = next_order(t);
+  if (first == 0) {
     // this step checked no order
     t->steps = t->steps - 1;
     for k: int32 in 0..t->n {
@@ -527,7 +530,7 @@ fn search_step(t: Tsp*) {
     return;
   }
 
-  t->cost = tsp_cost_of(t, &t->tour[0], t->n);
+  path_from(t, first);
   if (t->cost < t->best_cost - 0.000000001) {
     keep_best(t);
   }

@@ -3,12 +3,18 @@
 import "std/io";
 import "../src/tsp.mettle";
 
-fn finish(t: Tsp*, algo: int32) -> float64 {
-  tsp_start(t, algo);
+// steps a started run to the end
+fn run_out(t: Tsp*) -> float64 {
   while (tsp_step(t)) { }
   return tsp_cost_of(t, &t->tour[0], t->n);
 }
 
+fn finish(t: Tsp*, algo: int32) -> float64 {
+  tsp_start(t, algo);
+  return run_out(t);
+}
+
+// nearest neighbour tour, the run is left at the start of 2-opt
 fn nn_only(t: Tsp*) -> float64 {
   tsp_start(t, TSP_NEAREST);
   while (t->phase == TSP_BUILD) {
@@ -37,7 +43,7 @@ fn main() -> int32 {
     tsp_random_cities(t, 9);
     var best: float64 = finish(t, TSP_EXHAUSTIVE);
     var a: float64 = nn_only(t);
-    var b: float64 = finish(t, TSP_NEAREST);
+    var b: float64 = run_out(t);
     var c: float64 = finish(t, TSP_ANNEAL);
     nn = nn + (a / best - 1.0);
     two = two + (b / best - 1.0);
@@ -68,7 +74,7 @@ fn main() -> int32 {
   for r: int32 in 0..runs {
     tsp_random_cities(t, 100);
     nn = nn + nn_only(t);
-    two = two + finish(t, TSP_NEAREST);
+    two = two + run_out(t);
     steps2 = steps2 + t->steps;
     ann = ann + finish(t, TSP_ANNEAL);
     stepsa = stepsa + t->steps;

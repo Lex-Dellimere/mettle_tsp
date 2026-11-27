@@ -10,11 +10,8 @@ fn fail(what: string) {
   g_fail = g_fail + 1;
 }
 
-fn run_to_end(t: Tsp*, algo: int32) -> float64 {
-  if (!tsp_start(t, algo)) {
-    return -1.0;
-  }
-
+// steps a started run to the end and checks the tour
+fn run_out(t: Tsp*) -> float64 {
   var guard: int64 = 0;
   while (tsp_step(t)) {
     guard = guard + 1;
@@ -38,6 +35,13 @@ fn run_to_end(t: Tsp*, algo: int32) -> float64 {
   return c;
 }
 
+fn run_to_end(t: Tsp*, algo: int32) -> float64 {
+  if (!tsp_start(t, algo)) {
+    return -1.0;
+  }
+  return run_out(t);
+}
+
 // recursive brute force, kept apart from the solver's walk
 fn brute(t: Tsp*, order: int32*, used: bool*, k: int32, best: float64*) {
   if (k == t->n) {
@@ -59,7 +63,7 @@ fn brute(t: Tsp*, order: int32*, used: bool*, k: int32, best: float64*) {
   }
 }
 
-// nearest neighbour tour before 2-opt
+// nearest neighbour tour, the run is left at the start of 2-opt
 fn nn_cost(t: Tsp*) -> float64 {
   tsp_start(t, TSP_NEAREST);
   while (t->phase == TSP_BUILD) {
@@ -83,7 +87,7 @@ fn main() -> int32 {
 
     tsp_random_cities(t, n);
     var nn: float64 = nn_cost(t);
-    var two: float64 = run_to_end(t, TSP_NEAREST);
+    var two: float64 = run_out(t);
     var ann: float64 = run_to_end(t, TSP_ANNEAL);
     if (two > nn + 0.000001) {
       fail("2-opt made the tour longer: {nn} -> {two}");

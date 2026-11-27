@@ -8,7 +8,6 @@ const PAPER: uint32 = 0xFFF5F1E8;
 const PAPER_EDGE: uint32 = 0xFFDCD4C4;
 const GRID: uint32 = 0xFFE8E1D2;
 const INK: uint32 = 0xFF2A2722;
-const INK_FAINT: uint32 = 0x332A2722;
 const TESTED: uint32 = 0xFFD0452B;
 const TAKEN: uint32 = 0xFF2F8A4C;       // edges the last step put in
 const BEST_BAND: uint32 = 0x66E8B448;   // under the best tour so far
