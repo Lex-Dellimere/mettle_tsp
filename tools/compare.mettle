@@ -1,9 +1,7 @@
-// how long each method's tours are on 9 and 100 city maps
 // 9 city maps are scored against exhaustive search
 import "std/io";
 import "../src/tsp.mettle";
 
-// steps a started run to the end
 fn run_out(t: Tsp*) -> float64 {
   while (tsp_step(t)) { }
   return tsp_cost_of(t, &t->tour[0], t->n);
@@ -14,7 +12,7 @@ fn finish(t: Tsp*, algo: int32) -> float64 {
   return run_out(t);
 }
 
-// nearest neighbour tour, the run is left at the start of 2-opt
+// leaves the run at the start of 2-opt
 fn nn_only(t: Tsp*) -> float64 {
   tsp_start(t, TSP_NEAREST);
   while (t->phase == TSP_BUILD) {
@@ -60,7 +58,9 @@ fn main() -> int32 {
   }
 
   var k: float64 = (float64)runs;
-  println("9 cities, {runs} maps: tenths of a percent above shortest, and maps where the method found the shortest");
+  var what: string = "tenths of a percent above shortest, " +
+                     "and maps where the method found the shortest";
+  println("9 cities, {runs} maps: {what}");
   println("nearest {pct(nn / k)} {nn_hit}");
   println("2opt {pct(two / k)} {two_hit}");
   println("anneal {pct(ann / k)} {ann_hit}");

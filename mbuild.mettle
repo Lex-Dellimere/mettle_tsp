@@ -1,9 +1,8 @@
-// traveling salesman solved three ways, drawn with MythicUI
 import "mbuild/api";
 
 fn project() {
   mb_package("mettle_tsp", "0.1.0");
-  mb_meta("description", "The traveling salesman problem solved three ways, every step drawn, in Mettle");
+  mb_meta("description", "The traveling salesman problem solved three ways, with every step drawn");
   mb_meta("license", "Apache-2.0");
   mb_targets("linux");
   mb_bin("tsp", "src/main.mettle");

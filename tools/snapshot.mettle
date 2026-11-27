@@ -1,5 +1,4 @@
-// headless shots of a run into build/shots, which must exist
-// then clicks to check that cities get added and removed
+// shots into build/shots, which must exist, then a click test
 import "std/io";
 import "mythic/mythic";
 import "../src/app.mettle";

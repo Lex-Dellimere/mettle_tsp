@@ -1,5 +1,4 @@
-// saves each frame of a 60 city 2-opt run to build/frames
-// for the blog post animation, the folder must exist
+// a 60 city 2-opt run into build/frames, which must exist
 import "std/io";
 import "mythic/mythic";
 import "../src/app.mettle";

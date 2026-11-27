@@ -1,5 +1,3 @@
-// checks the solvers against each other on fixed random maps
-// one line per map, exits 1 after the first failing map
 import "std/io";
 import "../src/tsp.mettle";
 
@@ -10,7 +8,6 @@ fn fail(what: string) {
   g_fail = g_fail + 1;
 }
 
-// steps a started run to the end and checks the tour
 fn run_out(t: Tsp*) -> float64 {
   var guard: int64 = 0;
   while (tsp_step(t)) {
@@ -42,7 +39,7 @@ fn run_to_end(t: Tsp*, algo: int32) -> float64 {
   return run_out(t);
 }
 
-// recursive brute force, kept apart from the solver's walk
+// brute force, apart from the solver's code
 fn brute(t: Tsp*, order: int32*, used: bool*, k: int32, best: float64*) {
   if (k == t->n) {
     var c: float64 = tsp_cost_of(t, order, t->n);
@@ -63,7 +60,7 @@ fn brute(t: Tsp*, order: int32*, used: bool*, k: int32, best: float64*) {
   }
 }
 
-// nearest neighbour tour, the run is left at the start of 2-opt
+// leaves the run at the start of 2-opt
 fn nn_cost(t: Tsp*) -> float64 {
   tsp_start(t, TSP_NEAREST);
   while (t->phase == TSP_BUILD) {
@@ -93,6 +90,9 @@ fn main() -> int32 {
       fail("2-opt made the tour longer: {nn} -> {two}");
     }
 
+    var line: string = "n={n} nn={(int32)(nn * 1000.0)} 2opt={(int32)(two * 1000.0)}";
+    line = line + " anneal={(int32)(ann * 1000.0)}";
+
     if (n <= 9) {
       var ex: float64 = run_to_end(t, TSP_EXHAUSTIVE);
       if (t->steps != t->orders_total) {
@@ -119,9 +119,9 @@ fn main() -> int32 {
       if (ann < ex - 0.000001) {
         fail("annealing {ann} beat the optimum {ex}");
       }
-      println("n={n} nn={(int32)(nn * 1000.0)} 2opt={(int32)(two * 1000.0)} anneal={(int32)(ann * 1000.0)} optimum={(int32)(ex * 1000.0)}");
+      println(line + " optimum={(int32)(ex * 1000.0)}");
     } else {
-      println("n={n} nn={(int32)(nn * 1000.0)} 2opt={(int32)(two * 1000.0)} anneal={(int32)(ann * 1000.0)}");
+      println(line);
     }
 
     if (g_fail > 0) {
