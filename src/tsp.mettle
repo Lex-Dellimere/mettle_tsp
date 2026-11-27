@@ -1,27 +1,19 @@
-// Traveling salesman solvers that run a few steps at a time, so the UI can draw every step.
-//
-// Cities live in the unit square. A tour is an order of city indices; its cost is the length of
-// the closed loop through them. Three methods:
-//   TSP_NEAREST     builds a tour by always going to the nearest unvisited city, then improves it
-//                   with 2-opt: reverse a stretch of the tour whenever that shortens it, until no
-//                   reversal helps.
-//   TSP_ANNEAL      simulated annealing over the same reversals: a longer tour is sometimes
-//                   accepted, less often as the temperature falls, so the search can leave a
-//                   local minimum.
-//   TSP_EXHAUSTIVE  tries every order that starts at city 0. Exact, and only feasible for a few
-//                   cities: 10 cities means 362,880 orders.
+// traveling salesman solvers that run a few steps at a time
+// so the window can draw every step
 import "std/math" as m;
 
 export const TSP_MAX: int32 = 400;
 export const TSP_HIST: int32 = 512;
+
+// 10 cities is 362,880 orders
 export const TSP_EXHAUSTIVE_MAX: int32 = 10;
 
 export const TSP_NEAREST: int32 = 0;
 export const TSP_ANNEAL: int32 = 1;
 export const TSP_EXHAUSTIVE: int32 = 2;
 
-export const TSP_IDLE: int32 = 0;       // no tour yet
-export const TSP_BUILD: int32 = 1;      // nearest neighbour is adding cities
+export const TSP_IDLE: int32 = 0;
+export const TSP_BUILD: int32 = 1;      // nearest neighbour adding cities
 export const TSP_IMPROVE: int32 = 2;    // 2-opt sweeps
 export const TSP_ANNEALING: int32 = 3;
 export const TSP_SEARCH: int32 = 4;     // exhaustive search
@@ -33,48 +25,56 @@ export struct Tsp {
   y: float64[400];
   algo: int32;
   phase: int32;
-  tour: int32[400];        // the current order; during TSP_BUILD only the first `len` are set
+
+  // during TSP_BUILD only the first len are set
+  tour: int32[400];
   len: int32;
   used: bool[400];
-  best: int32[400];        // shortest complete tour seen so far
+  best: int32[400];
   best_cost: float64;
-  cost: float64;           // cost of `tour` once it is complete
-  start_cost: float64;     // cost of the first complete tour
+  cost: float64;           // valid once the tour is complete
+  start_cost: float64;     // the first complete tour
   steps: int64;
-  // 2-opt: the pair of tour positions under test, and whether this sweep changed anything
+
+  // 2-opt positions under test and whether this sweep helped
   i: int32;
   j: int32;
   improved: bool;
   swaps: int64;
-  // the last step's edges, for drawing: (ea, eb) and (ec, ed) were tested; `swapped` says
-  // whether they were replaced by (ea, ec) and (eb, ed). -1 when there is nothing to show.
+
+  // the last step's edges for drawing, -1 for none
+  // swapped means (ea, eb) (ec, ed) became (ea, ec) (eb, ed)
   ea: int32;
   eb: int32;
   ec: int32;
   ed: int32;
   swapped: bool;
-  // annealing
+
   temp: float64;
   cool: float64;
   anneal_total: int64;
   accepted: int64;
-  // exhaustive search
+
   orders_total: int64;
-  // xorshift state
+
   rng: uint64;
-  // cost of the tour over the run, sampled every `hist_every` steps
+
+  // tour cost over the run, one sample every hist_every steps
   hist: float32[512];
   hist_n: int32;
   hist_every: int64;
 }
 
-// ---------------------------------------------------------------- random numbers
-
 export fn tsp_seed(t: Tsp*, seed: uint64) {
   t->rng = seed;
-  if (t->rng == (uint64)0) { t->rng = (uint64)0x9E3779B97F4A7C15; }
+
+  // xorshift never leaves zero
+  if (t->rng == (uint64)0) {
+    t->rng = (uint64)0x9E3779B97F4A7C15;
+  }
 }
 
+// xorshift64*
 export fn tsp_rand(t: Tsp*) -> uint64 {
   var s: uint64 = t->rng;
   s = s ^ (s >> 12);
@@ -92,11 +92,11 @@ export fn tsp_randf(t: Tsp*) -> float64 {
 
 // uniform in 0..n-1
 export fn tsp_rand_below(t: Tsp*, n: int32) -> int32 {
-  if (n <= 1) { return 0; }
+  if (n <= 1) {
+    return 0;
+  }
   return (int32)(tsp_rand(t) % (uint64)n);
 }
-
-// ---------------------------------------------------------------- geometry
 
 export fn tsp_dist(t: Tsp*, a: int32, b: int32) -> float64 {
   var dx: float64 = t->x[a] - t->x[b];
@@ -106,7 +106,10 @@ export fn tsp_dist(t: Tsp*, a: int32, b: int32) -> float64 {
 
 // length of the closed loop through order[0..k]
 export fn tsp_cost_of(t: Tsp*, order: int32*, k: int32) -> float64 {
-  if (k < 2) { return 0.0; }
+  if (k < 2) {
+    return 0.0;
+  }
+
   var c: float64 = 0.0;
   for p: int32 in 0..k - 1 {
     c = c + tsp_dist(t, order[p], order[p + 1]);
@@ -128,21 +131,26 @@ export fn tsp_is_tour(t: Tsp*, order: int32*) -> bool {
   var seen: bool[400];
   for p: int32 in 0..t->n {
     var c: int32 = order[p];
-    if (c < 0 || c >= t->n) { return false; }
-    if (seen[c]) { return false; }
+    if (c < 0 || c >= t->n) {
+      return false;
+    }
+    if (seen[c]) {
+      return false;
+    }
     seen[c] = true;
   }
   return true;
 }
 
-// ---------------------------------------------------------------- cities
-
 fn edges_none(t: Tsp*) {
-  t->ea = -1; t->eb = -1; t->ec = -1; t->ed = -1;
+  t->ea = -1;
+  t->eb = -1;
+  t->ec = -1;
+  t->ed = -1;
   t->swapped = false;
 }
 
-// Forget any tour; keeps the cities.
+// forget the tour, keep the cities
 export fn tsp_reset(t: Tsp*) {
   t->phase = TSP_IDLE;
   t->len = 0;
@@ -159,8 +167,13 @@ export fn tsp_reset(t: Tsp*) {
 
 export fn tsp_random_cities(t: Tsp*, n: int32) {
   var k: int32 = n;
-  if (k > TSP_MAX) { k = TSP_MAX; }
-  if (k < 0) { k = 0; }
+  if (k > TSP_MAX) {
+    k = TSP_MAX;
+  }
+  if (k < 0) {
+    k = 0;
+  }
+
   t->n = k;
   for c: int32 in 0..k {
     t->x[c] = 0.03 + 0.94 * tsp_randf(t);
@@ -170,7 +183,10 @@ export fn tsp_random_cities(t: Tsp*, n: int32) {
 }
 
 export fn tsp_add_city(t: Tsp*, x: float64, y: float64) -> bool {
-  if (t->n >= TSP_MAX) { return false; }
+  if (t->n >= TSP_MAX) {
+    return false;
+  }
+
   t->x[t->n] = x;
   t->y[t->n] = y;
   t->n = t->n + 1;
@@ -179,7 +195,10 @@ export fn tsp_add_city(t: Tsp*, x: float64, y: float64) -> bool {
 }
 
 export fn tsp_remove_city(t: Tsp*, c: int32) {
-  if (c < 0 || c >= t->n) { return; }
+  if (c < 0 || c >= t->n) {
+    return;
+  }
+
   for k: int32 in c..t->n - 1 {
     t->x[k] = t->x[k + 1];
     t->y[k] = t->y[k + 1];
@@ -196,112 +215,148 @@ export fn tsp_nearest_city(t: Tsp*, x: float64, y: float64) -> int32 {
     var dx: float64 = t->x[c] - x;
     var dy: float64 = t->y[c] - y;
     var d: float64 = dx * dx + dy * dy;
-    if (best < 0 || d < bd) { best = c; bd = d; }
+    if (best < 0 || d < bd) {
+      best = c;
+      bd = d;
+    }
   }
   return best;
 }
 
-// ---------------------------------------------------------------- history
-
 fn hist_push(t: Tsp*, v: float64) {
   if (t->hist_n == TSP_HIST) {
-    // full: keep every other sample and sample half as often from now on
+    // full, so keep every other sample and halve the rate
     for k: int32 in 0..TSP_HIST / 2 {
       t->hist[k] = t->hist[k * 2];
     }
     t->hist_n = TSP_HIST / 2;
     t->hist_every = t->hist_every * 2;
   }
+
   t->hist[t->hist_n] = (float32)v;
   t->hist_n = t->hist_n + 1;
 }
 
 fn hist_tick(t: Tsp*, v: float64) {
-  if (t->steps % t->hist_every == 0) { hist_push(t, v); }
+  if (t->steps % t->hist_every == 0) {
+    hist_push(t, v);
+  }
 }
 
 fn keep_best(t: Tsp*) {
-  for p: int32 in 0..t->n { t->best[p] = t->tour[p]; }
+  for p: int32 in 0..t->n {
+    t->best[p] = t->tour[p];
+  }
   t->best_cost = t->cost;
 }
 
-// ---------------------------------------------------------------- starting a run
-
 fn factorial(k: int32) -> int64 {
   var f: int64 = 1;
-  for v: int32 in 2..k + 1 { f = f * (int64)v; }
+  for v: int32 in 2..k + 1 {
+    f = f * (int64)v;
+  }
   return f;
 }
 
-// Starts `algo` from scratch. Returns false when the algorithm cannot run on these cities.
+// false when algo cannot run on these cities
 export fn tsp_start(t: Tsp*, algo: int32) -> bool {
   tsp_reset(t);
   t->algo = algo;
-  if (t->n < 3) { return false; }
-  if (algo == TSP_EXHAUSTIVE && t->n > TSP_EXHAUSTIVE_MAX) { return false; }
+  if (t->n < 3) {
+    return false;
+  }
+  if (algo == TSP_EXHAUSTIVE && t->n > TSP_EXHAUSTIVE_MAX) {
+    return false;
+  }
+
   if (algo == TSP_NEAREST) {
-    for c: int32 in 0..t->n { t->used[c] = false; }
+    for c: int32 in 0..t->n {
+      t->used[c] = false;
+    }
     t->tour[0] = 0;
     t->used[0] = true;
     t->len = 1;
     t->phase = TSP_BUILD;
     return true;
   }
+
   if (algo == TSP_ANNEAL) {
-    // a random order, so the run starts far from any good tour
-    for p: int32 in 0..t->n { t->tour[p] = p; }
+    // random order so the run starts far from a good tour
+    for p: int32 in 0..t->n {
+      t->tour[p] = p;
+    }
     for p: int32 in 1..t->n {
       var q: int32 = 1 + tsp_rand_below(t, t->n - 1);
       var s: int32 = t->tour[p];
       t->tour[p] = t->tour[q];
       t->tour[q] = s;
     }
+
     t->len = t->n;
     t->cost = tsp_cost_of(t, &t->tour[0], t->n);
     t->start_cost = t->cost;
     keep_best(t);
-    // Start hot enough that a move costing a typical random edge is accepted about a third of
-    // the time, and stop when a move costing 1% of a typical good edge is almost never taken.
+
+    // start where a move costing an average edge is kept 1 in 3
+    // end where one costing 1% of a good edge is kept 1 in 150
     var edge: float64 = t->cost / (float64)t->n;
     var good: float64 = 0.75 / m.sqrt((float64)t->n);
     t->temp = edge;
     var t_end: float64 = good * 0.002;
+
     t->anneal_total = (int64)t->n * 4000;
-    if (t->anneal_total > (int64)1500000) { t->anneal_total = (int64)1500000; }
+    if (t->anneal_total > (int64)1500000) {
+      t->anneal_total = (int64)1500000;
+    }
+
+    // cool by the same factor each step to reach t_end
     t->cool = m.exp(m.log(t_end / t->temp) / (float64)t->anneal_total);
     t->phase = TSP_ANNEALING;
     hist_push(t, t->cost);
     return true;
   }
-  // exhaustive: city 0 first, then every order of the rest, in lexicographic order
-  for p: int32 in 0..t->n { t->tour[p] = p; }
+
+  // exhaustive search starts from the sorted order
+  for p: int32 in 0..t->n {
+    t->tour[p] = p;
+  }
   t->len = t->n;
   t->cost = tsp_cost_of(t, &t->tour[0], t->n);
   t->start_cost = t->cost;
   keep_best(t);
   t->orders_total = factorial(t->n - 1);
+
+  // the first order counts as checked
   t->steps = 1;
   t->phase = TSP_SEARCH;
   hist_push(t, t->best_cost);
   return true;
 }
 
-// ---------------------------------------------------------------- one step of each method
-
 fn build_step(t: Tsp*) {
   var last: int32 = t->tour[t->len - 1];
   var next: int32 = -1;
   var nd: float64 = 0.0;
   for c: int32 in 0..t->n {
-    if (t->used[c]) { continue; }
+    if (t->used[c]) {
+      continue;
+    }
     var d: float64 = tsp_dist(t, last, c);
-    if (next < 0 || d < nd) { next = c; nd = d; }
+    if (next < 0 || d < nd) {
+      next = c;
+      nd = d;
+    }
   }
+
   t->tour[t->len] = next;
   t->used[next] = true;
   t->len = t->len + 1;
-  t->ea = last; t->eb = next; t->ec = -1; t->ed = -1;
+  t->ea = last;
+  t->eb = next;
+  t->ec = -1;
+  t->ed = -1;
   t->swapped = false;
+
   if (t->len == t->n) {
     t->cost = tsp_cost_of(t, &t->tour[0], t->n);
     t->start_cost = t->cost;
@@ -311,11 +366,16 @@ fn build_step(t: Tsp*) {
     t->j = 2;
     t->improved = false;
     t->phase = TSP_IMPROVE;
-    if (t->n < 4) { t->phase = TSP_DONE; edges_none(t); }
+
+    // 2-opt needs at least 4 cities
+    if (t->n < 4) {
+      t->phase = TSP_DONE;
+      edges_none(t);
+    }
   }
 }
 
-// reverse tour positions a..b, both included
+// reverse tour positions a..b inclusive
 fn reverse(t: Tsp*, a: int32, b: int32) {
   var lo: int32 = a;
   var hi: int32 = b;
@@ -328,8 +388,7 @@ fn reverse(t: Tsp*, a: int32, b: int32) {
   }
 }
 
-// Tests one pair of edges: (tour[i], tour[i+1]) and (tour[j], tour[j+1]). If joining
-// tour[i] to tour[j] and tour[i+1] to tour[j+1] is shorter, reverse the stretch between.
+// reverse i+1..j if joining i to j and i+1 to j+1 is shorter
 fn two_opt_step(t: Tsp*) {
   var n: int32 = t->n;
   var a: int32 = t->tour[t->i];
@@ -337,8 +396,12 @@ fn two_opt_step(t: Tsp*) {
   var c: int32 = t->tour[t->j];
   var d: int32 = t->tour[(t->j + 1) % n];
   var gain: float64 = tsp_dist(t, a, b) + tsp_dist(t, c, d) - tsp_dist(t, a, c) - tsp_dist(t, b, d);
-  t->ea = a; t->eb = b; t->ec = c; t->ed = d;
+  t->ea = a;
+  t->eb = b;
+  t->ec = c;
+  t->ed = d;
   t->swapped = false;
+
   if (gain > 0.000000001) {
     reverse(t, t->i + 1, t->j);
     t->cost = t->cost - gain;
@@ -346,11 +409,14 @@ fn two_opt_step(t: Tsp*) {
     t->swapped = true;
     t->swaps = t->swaps + 1;
   }
-  // next pair: j runs to the end of the tour; position 0 must not pair with the last edge,
-  // which shares city tour[0]
+
+  // with i at 0 the last edge shares tour[0], so skip it
   t->j = t->j + 1;
   var j_end: int32 = n;
-  if (t->i == 0) { j_end = n - 1; }
+  if (t->i == 0) {
+    j_end = n - 1;
+  }
+
   if (t->j >= j_end) {
     t->i = t->i + 1;
     t->j = t->i + 2;
@@ -367,16 +433,23 @@ fn two_opt_step(t: Tsp*) {
       t->improved = false;
     }
   }
-  if (t->cost < t->best_cost) { keep_best(t); }
+
+  if (t->cost < t->best_cost) {
+    keep_best(t);
+  }
 }
 
-// Proposes reversing a random stretch of the tour, and takes it if it is shorter, or by chance
-// exp(-increase / temperature) if it is longer.
+// try reversing a random stretch of the tour
 fn anneal_step(t: Tsp*) {
   var n: int32 = t->n;
   var p: int32 = 1 + tsp_rand_below(t, n - 1);
   var q: int32 = 1 + tsp_rand_below(t, n - 1);
-  if (p > q) { var s: int32 = p; p = q; q = s; }
+  if (p > q) {
+    var s: int32 = p;
+    p = q;
+    q = s;
+  }
+
   t->swapped = false;
   if (p != q) {
     var a: int32 = t->tour[p - 1];
@@ -384,20 +457,33 @@ fn anneal_step(t: Tsp*) {
     var c: int32 = t->tour[q];
     var d: int32 = t->tour[(q + 1) % n];
     var delta: float64 = tsp_dist(t, a, c) + tsp_dist(t, b, d) - tsp_dist(t, a, b) - tsp_dist(t, c, d);
-    t->ea = a; t->eb = b; t->ec = c; t->ed = d;
+    t->ea = a;
+    t->eb = b;
+    t->ec = c;
+    t->ed = d;
+
+    // a longer tour is kept with chance exp(-delta / temp)
     var take: bool = delta <= 0.0;
-    if (!take) { take = tsp_randf(t) < m.exp(-delta / t->temp); }
+    if (!take) {
+      take = tsp_randf(t) < m.exp(-delta / t->temp);
+    }
+
     if (take) {
       reverse(t, p, q);
       t->cost = t->cost + delta;
       t->accepted = t->accepted + 1;
       t->swapped = true;
-      if (t->cost < t->best_cost - 0.000000001) { keep_best(t); }
+      if (t->cost < t->best_cost - 0.000000001) {
+        keep_best(t);
+      }
     }
   }
+
   t->temp = t->temp * t->cool;
   if (t->steps >= t->anneal_total) {
-    for k: int32 in 0..n { t->tour[k] = t->best[k]; }
+    for k: int32 in 0..n {
+      t->tour[k] = t->best[k];
+    }
     t->cost = tsp_cost_of(t, &t->tour[0], n);
     t->best_cost = t->cost;
     t->phase = TSP_DONE;
@@ -405,14 +491,22 @@ fn anneal_step(t: Tsp*) {
   }
 }
 
-// Next order in lexicographic order over positions 1..n-1. Returns false after the last one.
+// next lexicographic order of 1..n-1, false after the last
 fn next_order(t: Tsp*) -> bool {
   var n: int32 = t->n;
   var k: int32 = n - 2;
-  while (k >= 1 && t->tour[k] > t->tour[k + 1]) { k = k - 1; }
-  if (k < 1) { return false; }
+  while (k >= 1 && t->tour[k] > t->tour[k + 1]) {
+    k = k - 1;
+  }
+  if (k < 1) {
+    return false;
+  }
+
   var l: int32 = n - 1;
-  while (t->tour[l] < t->tour[k]) { l = l - 1; }
+  while (t->tour[l] < t->tour[k]) {
+    l = l - 1;
+  }
+
   var s: int32 = t->tour[k];
   t->tour[k] = t->tour[l];
   t->tour[l] = s;
@@ -422,20 +516,29 @@ fn next_order(t: Tsp*) -> bool {
 
 fn search_step(t: Tsp*) {
   if (!next_order(t)) {
-    t->steps = t->steps - 1;    // this step found no order to check
-    for k: int32 in 0..t->n { t->tour[k] = t->best[k]; }
+    // this step checked no order
+    t->steps = t->steps - 1;
+    for k: int32 in 0..t->n {
+      t->tour[k] = t->best[k];
+    }
     t->cost = t->best_cost;
     t->phase = TSP_DONE;
     edges_none(t);
     return;
   }
+
   t->cost = tsp_cost_of(t, &t->tour[0], t->n);
-  if (t->cost < t->best_cost - 0.000000001) { keep_best(t); }
+  if (t->cost < t->best_cost - 0.000000001) {
+    keep_best(t);
+  }
 }
 
-// One step of the running method. Returns false once the run is over.
+// false once the run is over
 export fn tsp_step(t: Tsp*) -> bool {
-  if (t->phase == TSP_IDLE || t->phase == TSP_DONE) { return false; }
+  if (t->phase == TSP_IDLE || t->phase == TSP_DONE) {
+    return false;
+  }
+
   t->steps = t->steps + 1;
   if (t->phase == TSP_BUILD) {
     build_step(t);
@@ -449,16 +552,22 @@ export fn tsp_step(t: Tsp*) -> bool {
     search_step(t);
     hist_tick(t, t->best_cost);
   }
+
+  // end the history on the final cost
   if (t->phase == TSP_DONE) {
-    if (t->hist_n == 0 || t->hist[t->hist_n - 1] != (float32)t->cost) { hist_push(t, t->cost); }
+    if (t->hist_n == 0 || t->hist[t->hist_n - 1] != (float32)t->cost) {
+      hist_push(t, t->cost);
+    }
   }
   return t->phase != TSP_DONE;
 }
 
-// Runs up to `count` steps. Returns false once the run is over.
+// up to count steps, false once the run is over
 export fn tsp_run(t: Tsp*, count: int64) -> bool {
   for k: int64 in 0..count {
-    if (!tsp_step(t)) { return false; }
+    if (!tsp_step(t)) {
+      return false;
+    }
   }
   return t->phase != TSP_DONE && t->phase != TSP_IDLE;
 }

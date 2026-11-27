@@ -1,5 +1,5 @@
-// Renders the app headless at a few points of a run and saves PNGs into build/shots/.
-// Also clicks the map once to check that a click adds a city.
+// headless shots of a run into build/shots, which must exist
+// then clicks to check that cities get added and removed
 import "std/io";
 import "mythic/mythic";
 import "../src/app.mettle";
@@ -11,7 +11,9 @@ fn frame(a: MythicApp*, app: TspApp*) {
 }
 
 fn frames(a: MythicApp*, app: TspApp*, k: int32) {
-  for q: int32 in 0..k { frame(a, app); }
+  for q: int32 in 0..k {
+    frame(a, app);
+  }
 }
 
 fn shot(a: MythicApp*, app: TspApp*, name: string) {
@@ -26,9 +28,11 @@ fn click(a: MythicApp*, app: TspApp*, x: float32, y: float32, button: int32) {
   var mv: MythicEvent = { kind: MYTHIC_EV_MOUSE_MOVE, x: x, y: y };
   mythic_headless_push(p, mv);
   frame(a, app);
+
   var dn: MythicEvent = { kind: MYTHIC_EV_MOUSE_DOWN, x: x, y: y, button: button };
   mythic_headless_push(p, dn);
   frame(a, app);
+
   var up: MythicEvent = { kind: MYTHIC_EV_MOUSE_UP, x: x, y: y, button: button };
   mythic_headless_push(p, up);
   frame(a, app);
@@ -59,7 +63,9 @@ fn main() -> int32 {
   tsp_start(&app->t, TSP_ANNEAL);
   app->running = true;
   app->speed = 0.7;
-  while (app->t.steps < app->t.anneal_total / 3) { frame(a, app); }
+  while (app->t.steps < app->t.anneal_total / 3) {
+    frame(a, app);
+  }
   shot(a, app, "5-anneal");
 
   tsp_random_cities(&app->t, 9);
@@ -79,6 +85,7 @@ fn main() -> int32 {
   click(a, app, 500.0, 600.0, 3);
   println("cities after a right-click on one: {app->t.n}");
   shot(a, app, "8-clicked");
+
   mythic_app_destroy(a);
   return 0;
 }

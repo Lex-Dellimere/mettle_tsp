@@ -1,4 +1,4 @@
-// Traveling salesman, drawn with MythicUI.
+// traveling salesman, drawn with MythicUI
 import "mythic/mythic";
 import "std/random";
 import "app.mettle";

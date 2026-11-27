@@ -1,4 +1,4 @@
-// mettle_tsp: the traveling salesman problem, solved three ways and drawn step by step with MythicUI.
+// traveling salesman solved three ways, drawn with MythicUI
 import "mbuild/api";
 
 fn project() {
@@ -11,7 +11,9 @@ fn project() {
   mb_bin("compare", "tools/compare.mettle");
   mb_bin("snapshot", "tools/snapshot.mettle");
   mb_bin("frames", "tools/frames.mettle");
-  mb_link_libs("c");          // MythicUI loads OpenGL at run time with dlopen
+
+  // for dlopen, which MythicUI uses to load OpenGL
+  mb_link_libs("c");
   mb_agents(false);
 }
 
